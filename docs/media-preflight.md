@@ -4,7 +4,7 @@
 
 ## 재현
 
-프로젝트 루트에서 실행한다. SDK가 PATH에 있으면 `dotnet`으로 바꿀 수 있다. 결과 경로는 반드시 새 디렉터리여야 한다. 기존 경로면 쓰기 전에 중단한다.
+프로젝트 루트에서 실행한다. SDK가 PATH에 있으면 `dotnet`으로 바꿀 수 있다. 결과 경로는 반드시 현재 작업 디렉터리의 `test-artifacts` 하위 새 디렉터리여야 한다. 기존 경로, 범위 밖 경로, 심볼릭 링크/정션을 거치는 경로면 쓰기 전에 중단한다.
 
 ```powershell
 E:/tools/dotnet10/dotnet.exe restore tools/MediaPreflight --locked-mode
@@ -45,3 +45,9 @@ JPEG 쓰기는 Magick.NET 재인코딩 경로다. **원본 사진의 무손실 �
 ## 다음 경계
 
 ExifTool 정식 파일 확보와 무손실 태그 편집, 재배포 가능한 실제 HEIC/RAW/영상 시험 자료와 각 디코더, 제3자 고지 검토가 남아 있다. DB·WPF 화면·100만 건 성능은 이번 단계에 포함하지 않는다.
+
+## 변경 검토
+
+`178a853...4be70dd`를 독립된 두 검토자로 확인했다. Standards에서는 지침 위반 0건, Spec에서는 출력 경로 제한 누락 1건이 발견됐다. 이후 경로 제한과 정션/링크 거부를 추가하고 정상 경로 및 금지 경로를 재검증했다.
+
+보강 후 `run --project tools/MediaPreflight -c Release --no-restore -- test-artifacts/verification-03`은 exit 0이었다. 빌드한 DLL에 `preflight-forbidden-01`, `test-artifacts/../preflight-forbidden-02`, 기존 `test-artifacts/verification-03`을 전달하면 모두 비정상 종료로 거부했다. 범위 밖 두 경로는 생성되지 않았다. 정션 거부 분기는 코드 검토만 했으며 실제 정션 생성 시험은 하지 않았다. Spec 검토자는 경로 제한 수정도 다시 확인했다.

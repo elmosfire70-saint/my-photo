@@ -4,6 +4,14 @@ using System.Security.Cryptography;
 
 if (args.Length != 1) throw new ArgumentException("Usage: MediaPreflight NEW_OUTPUT_DIRECTORY");
 var output = Path.GetFullPath(args[0]);
+var artifactRoot = Path.GetFullPath("test-artifacts");
+if (!output.StartsWith(artifactRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+    throw new IOException("Output must be a new directory under test-artifacts in the project root.");
+for (var parent = Directory.GetParent(output); parent is not null; parent = parent.Parent)
+{
+    if (parent.Exists && (parent.Attributes & FileAttributes.ReparsePoint) != 0)
+        throw new IOException("Output ancestors must not be symbolic links or junctions.");
+}
 if (Directory.Exists(output)) throw new IOException("Use a new output directory.");
 Directory.CreateDirectory(output);
 var sample = Path.Combine(output, "sample.jpg");
