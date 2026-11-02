@@ -24,16 +24,10 @@ def classify(polygons, point):
     return "boundary-or-overlap", covered
 
 
-def check(path):
-    pyproj.network.set_network_enabled(False)
-    result = audit(path)
-    print("PASS package integrity", file=sys.stderr, flush=True)
-    result.pop("limits")
-    result["versions"] = {name: version(name) for name in ("shapely", "pyproj", "pyshp")}
-    result["versions"].update(geos=shapely.geos_version_string, proj=pyproj.proj_version_str)
+def load_boundaries(path, metadata, layers):
     polygons = {}
     with zipfile.ZipFile(path) as package:
-        for layer in ("sido", "sigungu"):
+        for layer in layers:
             prefix = next(name[:-4] for name in package.namelist()
                           if name.endswith("/bnd_" + layer + "_00_2025_2Q.shp"))
             streams = {ext: io.BytesIO(package.read(prefix + "." + ext)) for ext in ("shp", "shx", "dbf")}
@@ -43,8 +37,20 @@ def check(path):
                     geometry = record.shape.__geo_interface__
                     require(not any(record.shape._errors.values()), "SHP 링 해석 오류/자동 대체 감지")
                     polygons[layer][record.record[layer.upper() + "_CD"]] = shape(geometry)
-            require(len(polygons[layer]) == result["layers"][layer]["count"], "도형 수 불일치")
+            require(len(polygons[layer]) == metadata["layers"][layer]["count"]
+                    and set(polygons[layer]) == set(metadata["layers"][layer]["names"]), "도형/속성 코드 불일치")
             print("Loaded " + layer, file=sys.stderr, flush=True)
+    return polygons
+
+
+def check(path):
+    pyproj.network.set_network_enabled(False)
+    result = audit(path)
+    print("PASS package integrity", file=sys.stderr, flush=True)
+    result.pop("limits")
+    result["versions"] = {name: version(name) for name in ("shapely", "pyproj", "pyshp")}
+    result["versions"].update(geos=shapely.geos_version_string, proj=pyproj.proj_version_str)
+    polygons = load_boundaries(path, result, ("sido", "sigungu"))
     invalid = {layer: {code: shapely.is_valid_reason(polygon) for code, polygon in items.items()
                        if polygon.is_empty or not polygon.is_valid or polygon.area <= 0
                        or not all(math.isfinite(value) for value in polygon.bounds)}
