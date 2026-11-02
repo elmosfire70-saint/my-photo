@@ -7,6 +7,7 @@ using Microsoft.Data.Sqlite;
 namespace PhotoLibrary.Index;
 
 public sealed record ScanResult(int Written, int Skipped, int Errors);
+public sealed record MonthSummary(string Month, long Count, long EstimatedCount, long ErrorCount);
 public sealed record MediaRow(string Root, string RelativePath, string DateText, string DateSource,
     string? Offset, long? Width, long? Height, string ExifJson, string ProfilesJson, string? Error);
 
@@ -163,6 +164,22 @@ public static class Catalog
             reader.IsDBNull(5) ? null : reader.GetInt64(5), reader.IsDBNull(6) ? null : reader.GetInt64(6),
             reader.GetString(7), reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9)));
         return rows;
+    }
+
+    public static IReadOnlyList<MonthSummary> Months(string database, string root)
+    {
+        root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        using var connection = Open(Path.GetFullPath(database), create: false);
+        using var command = Command(connection, """
+            SELECT substr(date_text,1,7) AS month,COUNT(*),
+                SUM(CASE WHEN date_source='file-modified-utc-estimated' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END)
+            FROM media WHERE root=$root GROUP BY month ORDER BY month DESC
+            """, ("$root", root));
+        using var reader = command.ExecuteReader();
+        var months = new List<MonthSummary>();
+        while (reader.Read()) months.Add(new MonthSummary(reader.GetString(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3)));
+        return months;
     }
 
     private static SqliteConnection Open(string path, bool create)

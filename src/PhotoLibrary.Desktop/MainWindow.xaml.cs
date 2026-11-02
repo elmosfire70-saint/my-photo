@@ -1,5 +1,6 @@
 // 읽기 전용 수집·필터·페이지와 비동기 미리보기의 화면 상태를 연결합니다.
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -27,6 +28,9 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _timer;
     private readonly SemaphoreSlim _previewGate = new(1);
     private bool _closed, _closeAfterScan;
+    private bool _updatingTimeline;
+    private string? _timelineKey = "all";
+    private sealed record TimelineChoice(string Key, DateTime? From, DateTime? To);
     private Point? _dragStart;
     private double _dragHorizontal, _dragVertical;
     internal Task PreviewTask { get; private set; } = Task.CompletedTask;
@@ -56,6 +60,7 @@ public partial class MainWindow : Window
             _database = Path.GetFullPath(picker.FileName);
             Status.Text = "DB 위치를 선택했습니다. 폴더를 선택하거나 다시 수집하세요.";
             PhotoList.ItemsSource = null;
+            ResetTimeline();
         }
     }
 
@@ -65,6 +70,7 @@ public partial class MainWindow : Window
         _root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
         _offset = 0;
         PhotoList.ItemsSource = null;
+        ResetTimeline();
         FolderLabel.Text = _root;
         FromDate.SelectedDate = ToDate.SelectedDate = null;
         ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = false;
@@ -87,18 +93,18 @@ public partial class MainWindow : Window
             _scan = null;
             ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = true;
             CancelScan.IsEnabled = false;
-            await RefreshRowsAsync();
+            await RefreshRowsAsync(refreshTimeline: true);
             if (_closeAfterScan) Close();
         }
     }
 
-    internal Task RefreshRowsAsync()
+    internal Task RefreshRowsAsync(bool refreshTimeline = false)
     {
-        _queryTask = RefreshAfterAsync(_queryTask, ++_queryVersion);
+        _queryTask = RefreshAfterAsync(_queryTask, ++_queryVersion, refreshTimeline);
         return _queryTask;
     }
 
-    private async Task RefreshAfterAsync(Task prior, int version)
+    private async Task RefreshAfterAsync(Task prior, int version, bool refreshTimeline)
     {
         await prior;
         if (_closed || _root is null || !File.Exists(_database)) return;
@@ -109,8 +115,14 @@ public partial class MainWindow : Window
         var to = ToDate.SelectedDate is { } last ? DateOnly.FromDateTime(last) : (DateOnly?)null;
         try
         {
-            var rows = await Task.Run(() => Catalog.List(database, from, to, PageSize + 1, root, offset));
-            if (_closed || version != _queryVersion || root != _root || database != _database || offset != _offset) return;
+            var result = await Task.Run(() => (
+                Rows: Catalog.List(database, from, to, PageSize + 1, root, offset),
+                Months: refreshTimeline ? Catalog.Months(database, root) : null));
+            if (_closed || root != _root || database != _database) return;
+            // 타임라인은 기간/페이지와 무관하므로 오래된 목록 요청에서도 같은 루트의 집계는 반영합니다.
+            if (result.Months is not null) RenderTimeline(result.Months);
+            if (version != _queryVersion || offset != _offset) return;
+            var rows = result.Rows;
             var selected = (PhotoList.SelectedItem as PhotoItem)?.Record.RelativePath;
             var items = rows.Take(PageSize).Select(row => new PhotoItem(row)).ToList();
             if (PhotoList.ItemsSource is not IReadOnlyList<PhotoItem> previous || !previous.SequenceEqual(items))
@@ -127,10 +139,78 @@ public partial class MainWindow : Window
 
     private async void Rescan_Click(object sender, RoutedEventArgs e) { if (_root is not null) await ScanFolderAsync(_root); }
     private void CancelScan_Click(object sender, RoutedEventArgs e) => _scan?.Cancel();
-    private async void Apply_Click(object sender, RoutedEventArgs e) { _offset = 0; await RefreshRowsAsync(); }
-    private async void Clear_Click(object sender, RoutedEventArgs e) { FromDate.SelectedDate = ToDate.SelectedDate = null; _offset = 0; await RefreshRowsAsync(); }
+    private async void Apply_Click(object sender, RoutedEventArgs e) { _timelineKey = null; UpdateTimelineSelection(); _offset = 0; await RefreshRowsAsync(); }
+    private async void Clear_Click(object sender, RoutedEventArgs e) { FromDate.SelectedDate = ToDate.SelectedDate = null; _timelineKey = "all"; UpdateTimelineSelection(); _offset = 0; await RefreshRowsAsync(); }
     private async void Previous_Click(object sender, RoutedEventArgs e) { _offset = Math.Max(0, _offset - PageSize); await RefreshRowsAsync(); }
     private async void Next_Click(object sender, RoutedEventArgs e) { _offset = checked(_offset + PageSize); await RefreshRowsAsync(); }
+
+    private void ResetTimeline()
+    {
+        _updatingTimeline = true;
+        Timeline.Items.Clear();
+        _timelineKey = "all";
+        TimelineSummary.Text = "폴더 전체 집계 · 수집 완료/취소 후 갱신됩니다.";
+        _updatingTimeline = false;
+    }
+
+    private void RenderTimeline(IReadOnlyList<MonthSummary> months)
+    {
+        _updatingTimeline = true;
+        try
+        {
+            Timeline.Items.Clear();
+            var count = months.Sum(month => month.Count);
+            TimelineSummary.Text = $"폴더 전체 {count:N0}개 · 추정 UTC {months.Sum(month => month.EstimatedCount):N0} · 오류/미검증 {months.Sum(month => month.ErrorCount):N0}";
+            Timeline.Items.Add(new TreeViewItem { Header = $"전체 날짜 · {count:N0}개", Tag = new TimelineChoice("all", null, null) });
+            // ponytail: 월 그룹을 모두 생성합니다. 비정상적으로 긴 연대의 대량 집계는 계층 가상화로 보완합니다.
+            foreach (var year in months.GroupBy(month => month.Month[..4]))
+            {
+                var number = int.Parse(year.Key, CultureInfo.InvariantCulture);
+                var yearItem = new TreeViewItem
+                {
+                    Header = $"{year.Key}년 · {year.Sum(month => month.Count):N0}개",
+                    Tag = new TimelineChoice(year.Key, new DateTime(number, 1, 1), new DateTime(number, 12, 31)),
+                    ToolTip = $"추정 UTC {year.Sum(month => month.EstimatedCount):N0} · 오류/미검증 {year.Sum(month => month.ErrorCount):N0}",
+                    IsExpanded = _timelineKey?.StartsWith(year.Key, StringComparison.Ordinal) == true || year.Key == months[0].Month[..4]
+                };
+                foreach (var month in year)
+                {
+                    var start = DateTime.ParseExact(month.Month + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture);
+                    yearItem.Items.Add(new TreeViewItem
+                    {
+                        Header = $"{start.Month:00}월 · {month.Count:N0}개 · 추정 {month.EstimatedCount:N0}",
+                        Tag = new TimelineChoice(month.Month, start, new DateTime(start.Year, start.Month, DateTime.DaysInMonth(start.Year, start.Month))),
+                        ToolTip = $"오류/미검증 {month.ErrorCount:N0}개 포함 · 촬영일 또는 추정 UTC의 달력 날짜"
+                    });
+                }
+                Timeline.Items.Add(yearItem);
+            }
+        }
+        finally { _updatingTimeline = false; }
+        UpdateTimelineSelection();
+    }
+
+    private void UpdateTimelineSelection()
+    {
+        _updatingTimeline = true;
+        try
+        {
+            foreach (var parent in Timeline.Items.Cast<TreeViewItem>())
+                foreach (var item in new[] { parent }.Concat(parent.Items.Cast<TreeViewItem>()))
+                    item.IsSelected = item.Tag is TimelineChoice choice && choice.Key == _timelineKey;
+        }
+        finally { _updatingTimeline = false; }
+    }
+
+    private async void Timeline_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (_updatingTimeline || e.NewValue is not TreeViewItem { Tag: TimelineChoice choice } || choice.Key == _timelineKey) return;
+        _timelineKey = choice.Key;
+        FromDate.SelectedDate = choice.From;
+        ToDate.SelectedDate = choice.To;
+        _offset = 0;
+        await RefreshRowsAsync();
+    }
 
     private async void PhotoList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {

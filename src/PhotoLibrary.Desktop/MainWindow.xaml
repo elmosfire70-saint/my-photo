@@ -47,7 +47,13 @@
       <Grid.ColumnDefinitions><ColumnDefinition Width="410" MinWidth="280"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
       <Border Background="White" Padding="12" BorderBrush="#DEE4ED" BorderThickness="1" CornerRadius="6">
         <DockPanel>
-          <TextBlock DockPanel.Dock="Top" Text="폴더의 사진" FontSize="18" FontWeight="Bold" Margin="0,0,0,12"/>
+          <Expander DockPanel.Dock="Top" Header="연도·월 타임라인" IsExpanded="True" Margin="0,0,0,12" FontSize="15">
+            <StackPanel>
+              <TextBlock x:Name="TimelineSummary" Text="폴더를 수집하면 연도·월이 표시됩니다." FontSize="11" Foreground="#65758A" TextWrapping="Wrap" Margin="3,8"/>
+              <TreeView x:Name="Timeline" Height="180" BorderThickness="0" FontSize="12" SelectedItemChanged="Timeline_SelectedItemChanged"
+                        AutomationProperties.Name="연도 월 타임라인"/>
+            </StackPanel>
+          </Expander>
           <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,12,0,0">
             <Button x:Name="PreviousPage" Content="이전" Click="Previous_Click" IsEnabled="False"/>
             <Button x:Name="NextPage" Content="다음" Click="Next_Click" IsEnabled="False"/>

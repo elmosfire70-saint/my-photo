@@ -40,6 +40,15 @@ internal static class UiSmokeTest
             image.Write(png);
         }
         for (var i = 0; i < 201; i++) File.Copy(png, Path.Combine(root, "more", $"산책-{i:000}.png"));
+        foreach (var sample in new[] { (0, "2020:02:29 23:59:59"), (1, "2020:12:31 23:59:59") })
+        {
+            var path = Path.Combine(root, "more", $"산책-{sample.Item1:000}.png");
+            using var image = new MagickImage(path);
+            var exif = new ExifProfile();
+            exif.SetValue(ExifTag.DateTimeOriginal, sample.Item2);
+            image.SetProfile(exif);
+            image.Write(path);
+        }
         File.WriteAllText(Path.Combine(root, "손상.jpg"), "not an image");
         File.WriteAllText(Path.Combine(root, "미검증.cr2"), "synthetic placeholder");
         File.SetAttributes(jpeg, File.GetAttributes(jpeg) | FileAttributes.ReadOnly);
@@ -53,7 +62,32 @@ internal static class UiSmokeTest
         Click(window.NextPage);
         await window.QueryTask;
         Check(window.PhotoList.Items.Count == 5 && window.PreviousPage.IsEnabled && !window.NextPage.IsEnabled, "next page");
+        Check(window.TimelineSummary.Text.Contains("205") && window.Timeline.Items.Count >= 3, "timeline counts all pages");
+        var year2020 = window.Timeline.Items.Cast<TreeViewItem>().Single(item => item.Header.ToString()!.StartsWith("2020년"));
+        year2020.IsExpanded = true;
+        await IdleAsync(window);
+        year2020.Items.Cast<TreeViewItem>().Single(item => item.Header.ToString()!.StartsWith("02월")).IsSelected = true;
+        await window.QueryTask;
+        Check(window.FromDate.SelectedDate == new DateTime(2020, 2, 1) && window.ToDate.SelectedDate == new DateTime(2020, 2, 29)
+            && window.PhotoList.Items.Count == 1 && !window.PreviousPage.IsEnabled, "timeline leap month resets page and dates");
+        year2020.IsSelected = true;
+        await window.QueryTask;
+        Check(window.FromDate.SelectedDate == new DateTime(2020, 1, 1) && window.ToDate.SelectedDate == new DateTime(2020, 12, 31)
+            && window.PhotoList.Items.Count == 3, "timeline year includes all three months");
+        year2020.Items.Cast<TreeViewItem>().Single(item => item.Header.ToString()!.StartsWith("12월")).IsSelected = true;
+        await window.QueryTask;
+        Check(window.ToDate.SelectedDate == new DateTime(2020, 12, 31) && window.PhotoList.Items.Count == 1, "timeline December bounds");
+        Click(window.ClearFilter);
+        await window.QueryTask;
+        Check(window.PhotoList.Items.Count == 200 && window.FromDate.SelectedDate is null && window.ToDate.SelectedDate is null,
+            "timeline clear restores all dates");
+        window.FromDate.SelectedDate = new DateTime(2005, 1, 1);
+        window.ToDate.SelectedDate = new DateTime(2005, 12, 31);
+        Click(window.ApplyFilter);
+        await window.QueryTask;
+        Check(window.PhotoList.Items.Count == 0 && window.TimelineSummary.Text.Contains("205"), "empty period retains whole-root timeline");
         await Select2020Async(window);
+        Check(window.Timeline.SelectedItem is null, "manual date filter clears tree selection");
         Check(window.PhotoList.Items.Count == 1, "UI inclusive date filter");
         window.PhotoList.SelectedIndex = 0;
         await window.PreviewTask;
@@ -96,6 +130,13 @@ internal static class UiSmokeTest
         Check(closingWindow.IsVisible, "close waits for scan cancellation");
         await closingScan;
         Check(!closingWindow.IsVisible, "close completes after checkpoint handling");
+        var emptyRoot = Path.Combine(output, "빈 폴더");
+        Directory.CreateDirectory(emptyRoot);
+        await window.ScanFolderAsync(emptyRoot);
+        Check(window.PhotoList.Items.Count == 0 && window.Timeline.Items.Count == 1
+            && window.Timeline.Items[0] is TreeViewItem empty && empty.Header.ToString()!.Contains("0개"), "empty folder clears previous timeline");
+        Check(Catalog.List(Path.Combine(output, "catalog.sqlite"), root: root, limit: 1000).Count == 205, "empty folder does not delete previous root");
+        await window.ScanFolderAsync(root);
         await Select2020Async(window);
         window.PhotoList.SelectedIndex = 0;
         await window.PreviewTask;

@@ -109,6 +109,37 @@ internal static class SelfTest
         Catalog.Scan(root, database);
         Check(Catalog.List(database).Single(row => row.RelativePath.EndsWith("fallback.png")).Width == 12
             && Catalog.List(database).Count == 5, "changed file updates without duplicates");
+        Check(Catalog.Months(database, root).Sum(month => month.Count) == 5, "timeline counts entire root");
+        var timelineRoot = Path.Combine(output, "timeline ä");
+        Directory.CreateDirectory(timelineRoot);
+        foreach (var sample in new[] { ("leap-a", "2020:02:29 23:59:59"), ("leap-b", "2020:02:01 00:00:00"),
+            ("dec", "2020:12:31 23:59:59"), ("jan", "2021:01:01 00:00:00") })
+        {
+            using var image = new MagickImage(MagickColors.Blue, 8, 6);
+            var exif = new ExifProfile();
+            exif.SetValue(ExifTag.DateTimeOriginal, sample.Item2);
+            image.SetProfile(exif);
+            image.Write(Path.Combine(timelineRoot, sample.Item1 + ".jpg"));
+        }
+        using (var image = new MagickImage(MagickColors.Red, 8, 6)) image.Write(Path.Combine(timelineRoot, "estimated.png"));
+        File.WriteAllText(Path.Combine(timelineRoot, "pending.mp4"), "synthetic catalog-only placeholder");
+        File.WriteAllText(Path.Combine(timelineRoot, "unverified.cr2"), "synthetic raw placeholder");
+        foreach (var name in new[] { "estimated.png", "pending.mp4", "unverified.cr2" })
+            File.SetLastWriteTimeUtc(Path.Combine(timelineRoot, name), new DateTime(2022, 3, 5, 0, 0, 0, DateTimeKind.Utc));
+        var timelineHashes = Directory.GetFiles(timelineRoot).ToDictionary(path => path, path => SHA256.HashData(File.ReadAllBytes(path)));
+        Catalog.Scan(timelineRoot, database);
+        var databaseHash = SHA256.HashData(File.ReadAllBytes(database));
+        var months = Catalog.Months(database, timelineRoot.ToUpperInvariant());
+        Check(months.Select(month => month.Month).SequenceEqual(new[] { "2022-03", "2021-01", "2020-12", "2020-02" }), "descending calendar months");
+        Check(months[0] == new MonthSummary("2022-03", 3, 3, 1) && months[3] == new MonthSummary("2020-02", 2, 0, 0),
+            "timeline separates estimated UTC and errors");
+        Check(months.Sum(month => month.Count) == 7 && Catalog.Months(database, root).Sum(month => month.Count) == 5, "timeline roots isolated");
+        Check(Catalog.Months(database, Path.Combine(output, "missing-root")).Count == 0, "empty timeline");
+        Check(Catalog.List(database, new DateOnly(2020, 2, 1), new DateOnly(2020, 2, 29), root: timelineRoot).Count == 2, "leap month bounds");
+        Check(Catalog.List(database, new DateOnly(2020, 12, 1), new DateOnly(2020, 12, 31), root: timelineRoot).Count == 1, "December bounds");
+        Check(Catalog.List(database, new DateOnly(2021, 1, 1), new DateOnly(2021, 12, 31), root: timelineRoot).Count == 1, "year bounds exclude previous December");
+        Check(databaseHash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(database))), "timeline queries do not mutate database");
+        Check(timelineHashes.All(pair => pair.Value.SequenceEqual(SHA256.HashData(File.ReadAllBytes(pair.Key)))), "timeline sources unchanged");
         Console.WriteLine("PASS: catalog self-test completed");
     }
 
