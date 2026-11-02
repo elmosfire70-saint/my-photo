@@ -1,5 +1,15 @@
 # 결정 기록
 
+## 사진 전체 화면·슬라이드쇼 착수
+
+사용자가 지도 전체 화면이 아니라 사진 전체 화면과 자동 전환/간격 설정으로 요청을 정정했다. 이번에는 지도 UI를 바꾸지 않는다. 기본 5초/1~300초, 마지막 사진에서 정지, 다시 재생하면 처음부터, 사진은 화면 맞춤(미리보기 긴 변 2400px 제한 유지)으로 구현한다. 모달 전체 화면에서 DB/폴더/기간을 고정하고 별도 창에서 조회하므로 원래 선택과 확대 상태는 유지한다. 간격은 실행 중 원래 창에도 돌아오지만 앱 재시작 후 기본값으로 시작한다. 수집 중에는 실행을 막아 내부 DB 갱신과 OFFSET 탐색 충돌을 피한다. 별도 앱/코덱/프레임워크를 추가하지 않는다.
+
+WPF SlideshowWindow에서 기존 Catalog.List/PreviewLoader와 DispatcherTimer를 재사용했다. 표시 완료 후 간격을 대기하고 로딩 중 중복 진입을 막으며 닫힌 창에 늦은 결과를 반영하지 않는다. 메인 목록에 실제 적용된 날짜 조건을 별도로 보관해 아직 적용하지 않은 입력값 때문에 선택 사진/기간이 바뀌지 않게 했다. 파일명은 하단 조작부에 배치해 사진을 덮지 않는다.
+
+최종 Release 빌드 0경고/0오류, --slideshow-test test-artifacts/slideshow-ui-final, --smoke-test test-artifacts/slideshow-regression-ui, Index --self-test test-artifacts/slideshow-regression-catalog, --iphone-test test-artifacts/slideshow-regression-iphone test-artifacts/iphone-media-final은 모두 exit 0이었다. 타이머 1초/2초, 300초 설정/오류 입력, 200건 페이지 전후, 영상/RAW/손상/없는 파일 건너뛰기, 폴더/적용 기간 격리, Esc/늦은 완료/빈 기간, 원본 해시와 원래 선택/확대/기간 입력 보존을 검사했다. 시험 창의 ShowActivated=false와 Maximized 조합이 WPF에서 거부되어 시험 설정을 실제 전체 화면 진입 방식으로 수정했다. 아이폰 검사는 기존 D3D11 할당/converter/thumbnail 로그가 유지되어 GPU/HDR 문제가 해결됐다고 표시하지 않는다. 실제 마우스/다중 모니터/장시간은 미검증이며 docs/slideshow.md를 따른다.
+
+파일 단위 건너뛰기는 IO/권한/디코더 오류로 한정하고 예상하지 못한 오류는 전체 재생을 정지시켜 알린다. 이 최종 수정 후 Release 빌드와 --slideshow-test test-artifacts/slideshow-ui-verified도 exit 0으로 재검증했다. 기존 미리보기 긴 변 제한은 유지했으며 사진을 가리지 않는 최종 전체 화면 및 메인 화면 캡처를 확인했다.
+
 ## 코드집 대조와 지역 판정 착수
 
 같은 ZIP의 adm_grid_mapping.xlsx는 시도 17개가 경계 DBF와 일치했다. 시군구 격자표는 250개로, 경계의 부천시 원미/소사/오정구(31051~31053) 대신 부천시(31050)가 있다. statistics_code.xlsx는 통계항목 코드표여서 행정구역 명칭표로 쓰지 않는다. 격자 매핑표의 집계 범위와 경계가 다를 수 있으므로 문서 오류라고 단정하거나 경계를 표에 맞춰 변경하지 않는다. 분류 레지스트리는 검증된 동일 기준일 DBF로 삼는다.

@@ -9,9 +9,9 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        if (args.Length != 0 && args is not ["--smoke-test", _] && args is not ["--iphone-test", _, _])
+        if (args.Length != 0 && args is not ["--smoke-test", _] && args is not ["--slideshow-test", _] && args is not ["--iphone-test", _, _])
         {
-            Console.Error.WriteLine("Usage: PhotoLibrary.Desktop [--smoke-test NEW_TEST_OUTPUT | --iphone-test NEW_TEST_OUTPUT FIXTURES]");
+            Console.Error.WriteLine("Usage: PhotoLibrary.Desktop [--smoke-test NEW_TEST_OUTPUT | --slideshow-test NEW_TEST_OUTPUT | --iphone-test NEW_TEST_OUTPUT FIXTURES]");
             return 1;
         }
         var testing = args.Length > 0;
@@ -29,6 +29,7 @@ internal static class Program
                 try
                 {
                     if (args[0] == "--iphone-test") await IphoneSmokeTest.RunAsync(window, args[1], args[2]);
+                    else if (args[0] == "--slideshow-test") await SlideshowSmokeTest.RunAsync(window, args[1]);
                     else await UiSmokeTest.RunAsync(window, args[1]);
                 }
                 catch (Exception exception) { Console.Error.WriteLine(exception); result = 1; }

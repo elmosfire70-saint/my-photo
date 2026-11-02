@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private string _database;
     private string? _root;
     private int _offset, _previewVersion, _queryVersion;
+    private DateOnly? _listedFrom, _listedTo;
     private CancellationTokenSource? _scan;
     private readonly DispatcherTimer _timer;
     private readonly SemaphoreSlim _previewGate = new(1);
@@ -44,6 +45,7 @@ public partial class MainWindow : Window
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _timer.Tick += async (_, _) => { if (_queryTask.IsCompleted) await RefreshRowsAsync(); };
         Closing += OnClosing;
+        PreviewKeyDown += (_, e) => { if (e.Key == Key.F11) { e.Handled = true; CreateSlideshow(false)?.ShowDialog(); } };
     }
 
     private async void ChooseFolder_Click(object sender, RoutedEventArgs e)
@@ -122,6 +124,7 @@ public partial class MainWindow : Window
             // 타임라인은 기간/페이지와 무관하므로 오래된 목록 요청에서도 같은 루트의 집계는 반영합니다.
             if (result.Months is not null) RenderTimeline(result.Months);
             if (version != _queryVersion || offset != _offset) return;
+            _listedFrom = from; _listedTo = to;
             var rows = result.Rows;
             var selected = (PhotoList.SelectedItem as PhotoItem)?.Record.RelativePath;
             var items = rows.Take(PageSize).Select(row => new PhotoItem(row)).ToList();
@@ -285,6 +288,7 @@ public partial class MainWindow : Window
     }
     private void Preview_MouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (e.ClickCount == 2) { e.Handled = true; CreateSlideshow(false)?.ShowDialog(); return; }
         _dragStart = e.GetPosition(Viewer); _dragHorizontal = Viewer.HorizontalOffset; _dragVertical = Viewer.VerticalOffset;
         Preview.CaptureMouse(); Preview.Cursor = Cursors.Hand; e.Handled = true;
     }
@@ -298,6 +302,24 @@ public partial class MainWindow : Window
     private void Preview_MouseUp(object sender, MouseButtonEventArgs e)
     {
         _dragStart = null; Preview.ReleaseMouseCapture(); Preview.Cursor = Cursors.Arrow;
+    }
+    private void FullScreen_Click(object sender, RoutedEventArgs e) => CreateSlideshow(false)?.ShowDialog();
+    private void Slideshow_Click(object sender, RoutedEventArgs e) => CreateSlideshow(true)?.ShowDialog();
+
+    internal SlideshowWindow? CreateSlideshow(bool autoPlay)
+    {
+        if (_scan is not null || !_queryTask.IsCompleted || _root is null || !File.Exists(_database))
+        { Status.Text = "사진 폴더 수집을 완료한 뒤 실행하세요."; return null; }
+        if (!SlideshowWindow.TrySeconds(SlideInterval.Text, out var seconds))
+        { Status.Text = "슬라이드쇼 간격은 1~300초의 정수로 입력하세요."; SlideInterval.Focus(); return null; }
+        if (!autoPlay && PhotoList.SelectedItem is not PhotoItem { Record.Error: null })
+        { Status.Text = "정상 사진을 선택한 뒤 전체 화면을 여세요."; return null; }
+        if (!autoPlay && PhotoList.SelectedItem is PhotoItem selected && Catalog.IsVideo(selected.Record.RelativePath))
+        { Status.Text = "사진 전체 화면에서는 동영상을 재생하지 않습니다."; return null; }
+        var show = new SlideshowWindow(_database, _root, _listedFrom, _listedTo,
+            PhotoList.SelectedIndex < 0 ? 0 : _offset + PhotoList.SelectedIndex, seconds, autoPlay) { Owner = this };
+        show.Closed += (_, _) => SlideInterval.Text = show.IntervalSeconds.ToString(CultureInfo.InvariantCulture);
+        return show;
     }
     private void OnClosing(object? sender, CancelEventArgs e)
     {

@@ -79,14 +79,19 @@
       <Border Grid.Column="2" Background="White" Padding="14" BorderBrush="#DEE4ED" BorderThickness="1" CornerRadius="6">
         <Grid>
           <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="150"/></Grid.RowDefinitions>
-          <DockPanel x:Name="ImageTools" Margin="0,0,0,12">
+          <WrapPanel x:Name="ImageTools" Margin="0,0,0,12">
             <TextBlock Text="미리보기" FontSize="18" FontWeight="Bold" Margin="0,0,18,0"/>
             <Button Content="화면 맞춤" Click="Fit_Click" Padding="10,4"/>
             <TextBlock Text="확대" VerticalAlignment="Center" Margin="8,0"/>
             <Slider x:Name="Zoom" Minimum="10" Maximum="800" Value="100" Width="140" ValueChanged="Zoom_ValueChanged"
                     VerticalAlignment="Center" AutomationProperties.Name="미리보기 확대율"/>
             <TextBlock Text="{Binding ElementName=Zoom, Path=Value, StringFormat={}{0:0}%}" VerticalAlignment="Center" Margin="10,0,0,0"/>
-          </DockPanel>
+            <Button x:Name="FullScreen" Content="사진 전체 화면 (F11)" Click="FullScreen_Click" Padding="10,4" Margin="12,0,8,0"/>
+            <Button x:Name="Slideshow" Content="슬라이드쇼" Click="Slideshow_Click" Padding="10,4"/>
+            <TextBlock Text="간격(초)" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox x:Name="SlideInterval" Text="5" Width="44" VerticalContentAlignment="Center"
+                     ToolTip="1~300초의 정수" AutomationProperties.Name="슬라이드쇼 간격 초"/>
+          </WrapPanel>
           <ScrollViewer x:Name="Viewer" Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
                         Background="#152238" PreviewMouseWheel="Viewer_MouseWheel">
             <Image x:Name="Preview" Stretch="Fill" HorizontalAlignment="Left" VerticalAlignment="Top"
