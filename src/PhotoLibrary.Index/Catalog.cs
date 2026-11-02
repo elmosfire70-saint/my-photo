@@ -122,18 +122,23 @@ public static class Catalog
         return result;
     }
 
-    public static IReadOnlyList<MediaRow> List(string database, DateOnly? from = null, DateOnly? to = null, int limit = 200)
+    public static IReadOnlyList<MediaRow> List(string database, DateOnly? from = null, DateOnly? to = null, int limit = 200,
+        string? root = null, int offset = 0)
     {
         if (limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
+        if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
         if (from > to) throw new ArgumentException("From date must not exceed to date.");
         using var connection = Open(Path.GetFullPath(database), create: false);
+        // ponytail: OFFSET은 뒤쪽 페이지에서 느려집니다. 대규모 검증 단계에서 키셋 페이지로 교체합니다.
         using var command = Command(connection, """
             SELECT root,relative_path,date_text,date_source,offset_text,width,height,exif_json,profiles_json,error
             FROM media WHERE ($from IS NULL OR date_text >= $from) AND ($to IS NULL OR date_text <= $to)
-            ORDER BY date_text DESC,root,relative_path LIMIT $limit
+                AND ($root IS NULL OR root=$root)
+            ORDER BY date_text DESC,root,relative_path LIMIT $limit OFFSET $offset
             """, ("$from", from?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
             ("$to", to is { } lastDate ? lastDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T23:59:59.9999999" : null),
-            ("$limit", limit));
+            ("$limit", limit), ("$root", root is null ? null : Path.TrimEndingDirectorySeparator(Path.GetFullPath(root))),
+            ("$offset", offset));
         using var reader = command.ExecuteReader();
         var rows = new List<MediaRow>();
         while (reader.Read()) rows.Add(new MediaRow(reader.GetString(0), reader.GetString(1), reader.GetString(2),

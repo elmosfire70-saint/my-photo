@@ -83,6 +83,9 @@ internal static class SelfTest
         var fallback = Catalog.List(database, new DateOnly(2021, 7, 2), new DateOnly(2021, 7, 2));
         Check(fallback.Count == 2 && fallback.All(row => row.DateSource == "file-modified-utc-estimated"), "missing or invalid EXIF uses explicit UTC estimate");
         Check(Catalog.List(database, limit: 1).Count == 1, "bounded query");
+        Check(Catalog.List(database, root: root, offset: 1).Count == 4, "folder-filtered next page");
+        Check(Catalog.List(database, root: Path.Combine(output, "other")).Count == 0, "other roots excluded");
+        Expect<ArgumentOutOfRangeException>(() => Catalog.List(database, offset: -1), "negative offset rejected");
         var repeat = Catalog.Scan(root.ToUpperInvariant(), database);
         Check(repeat.Skipped == 3 && repeat.Written == 2 && Catalog.List(database).Count == 5, "idempotent roots and retryable errors");
         foreach (var pair in hashes) Check(pair.Value.SequenceEqual(SHA256.HashData(File.ReadAllBytes(pair.Key))), "source bytes unchanged");
