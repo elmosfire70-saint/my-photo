@@ -45,6 +45,7 @@ internal static class IphoneSmokeTest
         {
             window.PhotoList.SelectedItem = items.Single(item => item.Record.RelativePath == name);
             await window.PreviewTask;
+            Check(window.Metadata.Text.Contains("영상 위치는 아직 미추출"), "video GPS not falsely reported absent " + name);
             var pane = window.VideoPanel;
             var player = pane.Player ?? throw new Exception("FAIL: video player not created");
             player.Mute = true;

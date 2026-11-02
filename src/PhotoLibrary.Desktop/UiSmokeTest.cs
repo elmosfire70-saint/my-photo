@@ -28,6 +28,10 @@ internal static class UiSmokeTest
         {
             var exif = new ExifProfile();
             exif.SetValue(ExifTag.DateTimeOriginal, "2020:01:02 03:04:05");
+            exif.SetValue(ExifTag.GPSLatitudeRef, "N");
+            exif.SetValue(ExifTag.GPSLongitudeRef, "E");
+            exif.SetValue(ExifTag.GPSLatitude, new[] { new Rational(37u), new Rational(30u), new Rational(0u) });
+            exif.SetValue(ExifTag.GPSLongitude, new[] { new Rational(126u), new Rational(15u), new Rational(0u) });
             image.SetProfile(exif);
             image.Write(jpeg);
         }
@@ -92,6 +96,8 @@ internal static class UiSmokeTest
         window.PhotoList.SelectedIndex = 0;
         await window.PreviewTask;
         Check(window.Preview.Source is BitmapSource { PixelWidth: 2000, PixelHeight: 1400 }, "read-only preview decoded");
+        Check(window.Metadata.Text.Contains("37.500000") && window.Metadata.Text.Contains("126.250000")
+            && window.Metadata.Text.Contains("경계 데이터 검증 대기"), "raw GPS shown without invented region");
         using (var unlocked = new FileStream(jpeg, FileMode.Open, FileAccess.Read, FileShare.None))
             Check(unlocked.Length > 0, "preview released original file handle");
         try
@@ -118,6 +124,10 @@ internal static class UiSmokeTest
         await window.PreviewTask;
         await oldPreview;
         Check(window.Preview.Source is null && window.PreviewHint.Text.Contains("INVALID_IMAGE"), "stale preview discarded and error shown");
+        Check(window.Metadata.Text.Contains("읽기 오류로 위치 미확정"), "unreadable photo GPS remains unknown");
+        window.PhotoList.SelectedItem = healthy;
+        await window.PreviewTask;
+        Check(window.Metadata.Text.Contains("정보 없음(위치 추정하지 않음)"), "absent GPS is not inferred");
         var canceled = window.ScanFolderAsync(root);
         Click(window.CancelScan);
         await canceled;

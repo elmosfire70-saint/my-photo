@@ -229,7 +229,14 @@ public partial class MainWindow : Window
         Preview.Width = Preview.Height = 0;
         if (item is null) { Metadata.Text = ""; PreviewHint.Text = "사진을 선택하세요."; return; }
         var row = item.Record;
-        Metadata.Text = $"{row.RelativePath}\n{item.DateLabel} · 오프셋 {row.Offset ?? "정보 없음"}\n상태 {item.StateLabel}\n원본 태그 · {row.ExifJson[..Math.Min(20000, row.ExifJson.Length)]}";
+        var gps = GpsMetadata.Read(row.ExifJson);
+        var location = Catalog.IsVideo(row.RelativePath) ? "GPS · 영상 위치는 아직 미추출"
+            : row.Error is not null ? "GPS · 미검증/읽기 오류로 위치 미확정"
+            : gps.Coordinates is { } point ? FormattableString.Invariant($"원본 EXIF GPS · 위도 {point.Latitude:F6} · 경도 {point.Longitude:F6}")
+            : gps.Error == "GPS_INCOMPLETE" ? "GPS · 일부 태그 누락으로 위치 미확정"
+            : gps.Error is not null ? "GPS · 형식/값 오류로 위치 미확정"
+            : "GPS · 정보 없음(위치 추정하지 않음)";
+        Metadata.Text = $"{row.RelativePath}\n{item.DateLabel} · 오프셋 {row.Offset ?? "정보 없음"}\n상태 {item.StateLabel}\n{location}\n행정구역 자동 분류 · 경계 데이터 검증 대기\n원본 태그 · {row.ExifJson[..Math.Min(20000, row.ExifJson.Length)]}";
         if (row.Error is not null) { PreviewHint.Text = $"{item.StateLabel} · {row.Error} · 원본을 수정하지 않았습니다."; return; }
         if (Catalog.IsVideo(row.RelativePath))
         {

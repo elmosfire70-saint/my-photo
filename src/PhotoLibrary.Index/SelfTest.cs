@@ -1,6 +1,7 @@
 // 합성 이미지로 DB 수집·중단/재개·날짜 검색과 원본 불변성을 검증합니다.
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ImageMagick;
 using Microsoft.Data.Sqlite;
 
@@ -73,6 +74,7 @@ internal static class SelfTest
         using (var tags = JsonDocument.Parse(captured.ExifJson))
             Check(tags.RootElement.GetProperty("GPSLatitude")[1].GetProperty("Numerator").GetUInt32() == 30,
                 "EXIF arrays stored as values, not type names");
+        Check(GpsMetadata.Read(captured.ExifJson).Error == "GPS_INCOMPLETE", "partial GPS is not guessed");
         using (var profiles = JsonDocument.Parse(captured.ProfilesJson))
         {
             var exif = new ExifProfile(Convert.FromBase64String(profiles.RootElement.GetProperty("exif").GetString()!));
@@ -140,7 +142,44 @@ internal static class SelfTest
         Check(Catalog.List(database, new DateOnly(2021, 1, 1), new DateOnly(2021, 12, 31), root: timelineRoot).Count == 1, "year bounds exclude previous December");
         Check(databaseHash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(database))), "timeline queries do not mutate database");
         Check(timelineHashes.All(pair => pair.Value.SequenceEqual(SHA256.HashData(File.ReadAllBytes(pair.Key)))), "timeline sources unchanged");
+        CheckGps();
         Console.WriteLine("PASS: catalog self-test completed");
+    }
+
+    private static void CheckGps()
+    {
+        static string Json(uint[] latitude, uint[] longitude, string northSouth = "N", string eastWest = "E", uint denominator = 1) =>
+            JsonSerializer.Serialize(new
+            {
+                GPSLatitude = latitude.Select(n => new { Numerator = n, Denominator = denominator }),
+                GPSLongitude = longitude.Select(n => new { Numerator = n, Denominator = denominator }),
+                GPSLatitudeRef = northSouth, GPSLongitudeRef = eastWest
+            });
+        var valid = Json([37, 30, 0], [126, 15, 0]);
+        Check(GpsMetadata.Read(valid).Coordinates == new GpsCoordinates(37.5, 126.25), "GPS rational conversion");
+        Check(GpsMetadata.Read(Json([37, 30, 0], [126, 15, 0], denominator: 2)).Coordinates == new GpsCoordinates(18.75, 63.125), "GPS fractional rationals");
+        Check(GpsMetadata.Read(Json([37, 30, 0], [126, 15, 0], "S", "W")).Coordinates == new GpsCoordinates(-37.5, -126.25), "GPS south west signs");
+        Check(GpsMetadata.Read(Json([1, 0, 0], [2, 0, 0], " s\0 ", "w")).Coordinates == new GpsCoordinates(-1, -2), "GPS reference padding and case");
+        Check(GpsMetadata.Read(Json([0, 0, 0], [0, 0, 0])).Coordinates == new GpsCoordinates(0, 0), "GPS zero is valid");
+        Check(GpsMetadata.Read(Json([90, 0, 0], [180, 0, 0])).Coordinates == new GpsCoordinates(90, 180), "GPS poles and antimeridian");
+        foreach (var invalid in new[]
+        {
+            Json([90, 1, 0], [180, 0, 0]), Json([0, 0, 0], [180, 0, 1]),
+            Json([1, 60, 0], [2, 0, 0]), Json([1, 0, 60], [2, 0, 0]),
+            Json([1, 0], [2, 0, 0]), Json([1, 0, 0], [2, 0, 0], denominator: 0),
+            Json([1, 0, 0], [2, 0, 0], "X", "E"), Json([1, 0, 0], [2, 0, 0], "", "E")
+        }) Check(GpsMetadata.Read(invalid).Error == "GPS_INVALID_VALUE", "GPS invalid value rejected");
+        var negative = JsonNode.Parse(valid)!;
+        negative["GPSLatitude"]![0]!["Numerator"] = -1;
+        Check(GpsMetadata.Read(negative.ToJsonString()).Error == "GPS_INVALID_VALUE", "GPS negative rational rejected");
+        var wrongType = JsonNode.Parse(valid)!;
+        wrongType["GPSLongitude"] = "126.25";
+        Check(GpsMetadata.Read(wrongType.ToJsonString()).Error == "GPS_INVALID_VALUE", "GPS wrong type rejected");
+        var partial = JsonNode.Parse(valid)!.AsObject();
+        partial.Remove("GPSLatitudeRef");
+        Check(GpsMetadata.Read(partial.ToJsonString()).Error == "GPS_INCOMPLETE", "GPS missing direction not guessed");
+        Check(GpsMetadata.Read("{}") == new GpsReadResult(null, null), "GPS absent remains unknown");
+        Check(GpsMetadata.Read("{").Error == "GPS_INVALID_JSON" && GpsMetadata.Read("[]").Error == "GPS_INVALID_JSON", "GPS malformed JSON rejected");
     }
 
     private static void Check(bool condition, string message)
