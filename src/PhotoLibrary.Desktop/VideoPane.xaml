@@ -1,0 +1,22 @@
+<!-- 앱 로컬 VLC 엔진으로 로컬 동영상과 재생 컨트롤을 표시합니다. -->
+<UserControl x:Class="PhotoLibrary.Desktop.VideoPane"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF">
+ <Grid Background="#152238">
+  <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <vlc:VideoView x:Name="Surface"/>
+  <StackPanel Grid.Row="1" Background="#F5F7FA" Margin="0,8,0,0">
+   <Slider x:Name="Seek" Minimum="0" Maximum="1" ValueChanged="Seek_Changed" IsEnabled="False" Margin="8" AutomationProperties.Name="영상 위치"/>
+   <WrapPanel Margin="4">
+    <Button x:Name="PlayButton" Content="재생 / 계속" Click="Play_Click" IsEnabled="False"/>
+    <Button x:Name="PauseButton" Content="일시정지" Click="Pause_Click" IsEnabled="False"/>
+    <Button x:Name="StopButton" Content="정지" Click="Stop_Click" IsEnabled="False"/>
+    <TextBlock Text="볼륨" VerticalAlignment="Center" Margin="5"/>
+    <Slider x:Name="Volume" Minimum="0" Maximum="100" Value="70" Width="80" ValueChanged="Volume_Changed" VerticalAlignment="Center" AutomationProperties.Name="영상 볼륨"/>
+    <TextBlock x:Name="Clock" VerticalAlignment="Center" Margin="8" Text="00:00 / 00:00"/>
+   </WrapPanel>
+   <TextBlock x:Name="Information" Margin="8" TextWrapping="Wrap" Foreground="#344D6C" Text="동영상을 선택하세요."/>
+  </StackPanel>
+ </Grid>
+</UserControl>

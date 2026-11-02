@@ -4,6 +4,8 @@ Windows PC 한 대에서 내장 디스크·외장 USB의 사진, RAW, 동영상�
 
 현재는 **읽기 전용 WPF 폴더 화면·미리보기와 SQLite 수집·조회 코드가 있는 개발 버전**입니다. `Start-MyPhoto.cmd`로 실행할 수 있습니다. 배포 설치본은 아직 없으며 합성 시험 결과는 실제 파일 전체 지원이나 성능 보장이 아닙니다.
 
+HEIC/HEIF 사진 보기와 앱 로컬 VLC 기반 MOV/MP4 재생을 추가했습니다. 기존 앱을 닫고 실행한 뒤 **다시 수집**을 눌러 이전 미검증 상태를 갱신하세요. 실제 아이폰 HDR/Dolby Vision과 Live Photo 연결은 미검증/미구현입니다.
+
 - [구현 계획](plan.md). 기능·안전 규칙·기술 방향·검증 기준.
 - [체크리스트](checklist.md). 구현 진행 상태.
 - [결정 기록](context-notes.md). 인터뷰 선택과 조사 한계.
@@ -11,6 +13,7 @@ Windows PC 한 대에서 내장 디스크·외장 USB의 사진, RAW, 동영상�
 - [미디어 도구 시험](docs/media-preflight.md)과 [ExifTool 후속 시험](docs/exiftool-preflight.md). 재현 방법·결과·미검증 범위.
 - [읽기 전용 사진 DB 수집](docs/catalog-index.md). 명령행 사용법·합성 검사·제약.
 - [WPF 화면 실행과 검사](docs/desktop-preview.md). 폴더 탐색·확대·스크롤과 남은 검증.
+- [아이폰 사진·영상 지원](docs/iphone-media.md). 최신 고정 엔진·재생 조작·시험과 한계.
 
 핵심은 연도·월 타임라인과 날짜·기간·한국 시도/시군구·지도 검색입니다. 원본 수정은 DB 보정 후 사용자가 별도로 적용할 때만 백업을 거쳐 수행하도록 계획합니다.
 

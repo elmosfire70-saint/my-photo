@@ -14,7 +14,7 @@ namespace PhotoLibrary.Desktop;
 internal sealed record PhotoItem(MediaRow Record)
 {
     public string DateLabel => $"{Record.DateText[..19].Replace('T', ' ')} · {(Record.DateSource == "exif-original-wall-clock" ? "촬영일" : "추정 UTC")}";
-    public string StateLabel => Record.Error switch { null => "정상", "UNVERIFIED_FORMAT" => "미검증 형식", _ => "읽기 오류" };
+    public string StateLabel => Record.Error switch { null => Catalog.IsVideo(Record.RelativePath) ? "동영상" : "정상", "UNVERIFIED_FORMAT" => "미검증 형식", _ => "읽기 오류" };
 }
 
 public partial class MainWindow : Window
@@ -141,12 +141,26 @@ public partial class MainWindow : Window
     private async Task ShowPreviewAsync(PhotoItem? item)
     {
         var version = ++_previewVersion;
+        VideoPanel.Reset();
+        VideoPanel.Visibility = Visibility.Collapsed;
+        Viewer.Visibility = Visibility.Visible;
+        ImageTools.IsEnabled = true;
         Preview.Source = null;
         Preview.Width = Preview.Height = 0;
         if (item is null) { Metadata.Text = ""; PreviewHint.Text = "사진을 선택하세요."; return; }
         var row = item.Record;
         Metadata.Text = $"{row.RelativePath}\n{item.DateLabel} · 오프셋 {row.Offset ?? "정보 없음"}\n상태 {item.StateLabel}\n원본 태그 · {row.ExifJson[..Math.Min(20000, row.ExifJson.Length)]}";
         if (row.Error is not null) { PreviewHint.Text = $"{item.StateLabel} · {row.Error} · 원본을 수정하지 않았습니다."; return; }
+        if (Catalog.IsVideo(row.RelativePath))
+        {
+            Viewer.Visibility = Visibility.Collapsed;
+            VideoPanel.Visibility = Visibility.Visible;
+            ImageTools.IsEnabled = false;
+            PreviewHint.Text = "동영상 · 촬영일/GPS 미추출(파일 수정 UTC 사용) · 원본 변환 없음";
+            try { await VideoPanel.LoadAsync(row.Root, row.RelativePath); }
+            catch (Exception exception) { if (version == _previewVersion && !_closed) PreviewHint.Text = "동영상 열기 실패 · " + exception.Message; }
+            return;
+        }
         PreviewHint.Text = "미리보기 생성 중…";
         await _previewGate.WaitAsync();
         try
@@ -201,6 +215,6 @@ public partial class MainWindow : Window
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         if (_scan is not null) { e.Cancel = true; _closeAfterScan = true; _scan.Cancel(); Status.Text = "저장된 항목을 보존하고 종료하는 중…"; }
-        else { _closed = true; _previewVersion++; _timer.Stop(); }
+        else { _closed = true; _previewVersion++; _timer.Stop(); VideoPanel.Dispose(); }
     }
 }

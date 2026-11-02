@@ -41,7 +41,7 @@ internal static class UiSmokeTest
         }
         for (var i = 0; i < 201; i++) File.Copy(png, Path.Combine(root, "more", $"산책-{i:000}.png"));
         File.WriteAllText(Path.Combine(root, "손상.jpg"), "not an image");
-        File.WriteAllText(Path.Combine(root, "미검증.heic"), "synthetic placeholder");
+        File.WriteAllText(Path.Combine(root, "미검증.cr2"), "synthetic placeholder");
         File.SetAttributes(jpeg, File.GetAttributes(jpeg) | FileAttributes.ReadOnly);
         var hashes = Directory.GetFiles(root, "*", SearchOption.AllDirectories)
             .ToDictionary(path => path, path => SHA256.HashData(File.ReadAllBytes(path)));

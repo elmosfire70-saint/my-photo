@@ -14,9 +14,24 @@ public static class Catalog
 {
     private const int ApplicationId = 0x50484F54;
     private static readonly HashSet<string> Supported = new(StringComparer.OrdinalIgnoreCase)
-        { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".avif" };
+        { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".avif", ".heic", ".heif" };
     private static readonly HashSet<string> Unverified = new(StringComparer.OrdinalIgnoreCase)
-        { ".heic", ".heif", ".cr2", ".cr3", ".nef", ".arw", ".dng", ".mp4", ".mov" };
+        { ".cr2", ".cr3", ".nef", ".arw", ".dng" };
+
+    public static bool IsVideo(string path) => Path.GetExtension(path).Equals(".mp4", StringComparison.OrdinalIgnoreCase)
+        || Path.GetExtension(path).Equals(".mov", StringComparison.OrdinalIgnoreCase);
+
+    public static string ResolveMediaPath(string root, string relativePath)
+    {
+        root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        var path = Path.GetFullPath(Path.Combine(root, relativePath));
+        var prefix = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
+        if (Path.IsPathRooted(relativePath) || !path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("선택한 사진 폴더 밖의 파일은 열지 않습니다.");
+        RejectLinks(path);
+        if (!File.Exists(path)) throw new FileNotFoundException("미디어 파일을 찾을 수 없습니다.");
+        return path;
+    }
 
     public static ScanResult Scan(string root, string database, CancellationToken cancellation = default,
         Action<ScanResult>? progress = null)
@@ -43,7 +58,7 @@ public static class Catalog
         {
             cancellation.ThrowIfCancellationRequested();
             var extension = Path.GetExtension(path);
-            if (!Supported.Contains(extension) && !Unverified.Contains(extension)) continue;
+            if (!Supported.Contains(extension) && !Unverified.Contains(extension) && !IsVideo(path)) continue;
             var relative = Path.GetRelativePath(root, path);
             var file = new FileInfo(path);
             var length = file.Length;
@@ -66,6 +81,8 @@ public static class Catalog
             var profilesJson = "{}";
             string? error = null;
             if (Unverified.Contains(extension)) error = "UNVERIFIED_FORMAT";
+            else if (IsVideo(path))
+                exifJson = """{"MediaKind":"video","MetadataStatus":"capture-date-and-gps-not-extracted"}""";
             else
             {
                 try
@@ -94,7 +111,7 @@ public static class Catalog
                 }
                 catch (Exception exception) when (exception is MagickException or IOException or UnauthorizedAccessException)
                 {
-                    error = exception is MagickException ? "INVALID_IMAGE" : "READ_FAILED_OR_CHANGED";
+                    error = exception is MagickException and not MagickBlobErrorException ? "INVALID_IMAGE" : "READ_FAILED_OR_CHANGED";
                     width = height = null;
                     exifJson = profilesJson = "{}";
                     date = modified.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff", CultureInfo.InvariantCulture);

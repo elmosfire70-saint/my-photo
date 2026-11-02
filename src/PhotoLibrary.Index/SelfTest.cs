@@ -45,7 +45,7 @@ internal static class SelfTest
         File.SetLastWriteTimeUtc(png, modified);
         File.SetLastWriteTimeUtc(invalidDate, modified);
         File.WriteAllText(Path.Combine(root, "broken.jpg"), "not an image");
-        File.WriteAllText(Path.Combine(root, "unverified.heic"), "synthetic placeholder, not a HEIC fixture");
+        File.WriteAllText(Path.Combine(root, "unverified.cr2"), "synthetic placeholder, not a RAW fixture");
         File.WriteAllText(Path.Combine(root, "ignored.txt"), "not media");
         var hashes = Directory.GetFiles(root, "*", SearchOption.AllDirectories)
             .ToDictionary(path => path, path => SHA256.HashData(File.ReadAllBytes(path)));

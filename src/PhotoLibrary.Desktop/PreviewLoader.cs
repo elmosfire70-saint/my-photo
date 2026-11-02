@@ -2,6 +2,7 @@
 using System.IO;
 using System.Windows.Media.Imaging;
 using ImageMagick;
+using PhotoLibrary.Index;
 
 namespace PhotoLibrary.Desktop;
 
@@ -9,14 +10,7 @@ internal static class PreviewLoader
 {
     internal static BitmapSource Load(string root, string relativePath)
     {
-        root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
-        var path = Path.GetFullPath(Path.Combine(root, relativePath));
-        var prefix = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
-        if (Path.IsPathRooted(relativePath) || !path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            throw new IOException("선택한 사진 폴더 밖의 파일은 열지 않습니다.");
-        for (var node = new DirectoryInfo(path); node is not null; node = node.Parent)
-            if ((File.GetAttributes(node.FullName) & FileAttributes.ReparsePoint) != 0)
-                throw new IOException("링크·정션 경로의 미리보기는 열지 않습니다.");
+        var path = Catalog.ResolveMediaPath(root, relativePath);
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         using (var header = new MagickImage())
         {
