@@ -10,3 +10,7 @@ Magick.NET Q8 x64 15.0.0과 공식 ExifTool Windows 13.60을 후보로 검증한
 ## 관찰된 제약
 
 ExifTool 배포 URL이 HTML을 반환해 확보하지 못했다. 이번 두 경계 시험은 Magick.NET에 한정한다. JPEG 재인코딩 쓰기는 시험 전용이며 실제 원본 수정 기능으로 재사용하지 않는다. ExifTool·HEIC·실물 RAW/영상·배포 조건 검증은 다음 작업으로 남긴다.
+
+## 후속 작업 — 공식 소스 실행
+
+Windows 패키지 다운로드 대신 공식 Git 태그 13.60과 기존 Git Perl로 ExifTool 시험을 추가한다. 합성 JPEG 복사본만 다루며 촬영일·남위/서경 좌표 JSON 재읽기, 디코딩 픽셀 및 ImageDataHash SHA256 보존, 백업 복원과 오류 종료 감지를 확인한다. 도구/코덱 배포와 실제 HEIC/RAW/영상 검증은 포함하지 않는다.

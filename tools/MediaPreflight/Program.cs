@@ -2,7 +2,8 @@
 using ImageMagick;
 using System.Security.Cryptography;
 
-if (args.Length != 1) throw new ArgumentException("Usage: MediaPreflight NEW_OUTPUT_DIRECTORY");
+if (args.Length is not (1 or 3))
+    throw new ArgumentException("Usage: MediaPreflight NEW_OUTPUT_DIRECTORY [PERL_EXE EXIFTOOL_SCRIPT]");
 var output = Path.GetFullPath(args[0]);
 var artifactRoot = Path.GetFullPath("test-artifacts");
 if (!output.StartsWith(artifactRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
@@ -80,3 +81,7 @@ catch (MagickException)
 {
     Console.WriteLine("PASS: corrupt image rejected");
 }
+if (args.Length == 3)
+    await ExifToolCheck.RunAsync(output, Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+else
+    Console.WriteLine("UNVERIFIED: ExifTool requires explicit Perl and script paths");
