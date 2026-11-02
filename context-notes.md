@@ -1,5 +1,13 @@
 # 결정 기록
 
+## 공식 패키지 공개 다운로드 확인
+
+SGIS downloadList는 HTTP 200이어도 로그인 안내 스크립트만 반환한다. 반면 공공데이터포털 15129688의 공개 버튼은 selectFileDataDownload.do 응답에서 status=true와 공식 ZIP 파일 정보를 반환했다. 로그인 경로를 우회하지 않고 포털 공개 배포를 확인한다. Insane Search의 샌드박스 DNS 실패 및 cp949 출력 오류를 자료 부재로 해석하지 않는다. 일반 실행 환경의 공식 HTTPS 요청으로 공개 페이지를 확인했다.
+
+공식 check-limit.json의 needCaptcha=false 확인 후 ZIP 269,032,521바이트를 확보했다. 같은 20250630 기준 시도 17/시군구 252개의 한글명·상위 코드와 UTF-8/동일 투영 좌표계를 확인했다. 표준 라이브러리 검사 도구 tools/audit_sgis_package.py를 추가했고 전체 CRC·고정 SHA256·DBF/SHX/SHP 헤더를 검사한다. GPS는 도 단위지만 배포 경계는 미터 단위이므로 직접 비교하지 않는다. 코드집 파일은 확보했지만 셀 대조, 공간 위상/변환 및 재배포 조건 후속 확인 전 자동 지역 분류는 유지 보류한다.
+
+검증은 번들 Python으로 `tools/audit_sgis_package.py .cache/korea-boundaries/sgis-20250630.zip` exit 0, 같은 도구에 plan.md를 넣었을 때 고정 해시 불일치로 거부, `git diff --check` 통과였다. 앱 소스·DB·원본 미디어는 이번에 수정하지 않았으며 WPF 회귀 검사는 실행하지 않았다.
+
 ## 한국 경계 후보와 GPS 기반 검증
 
 공식 geoBoundaries API는 ADM1 2021/17개, ADM2 2020/229개를 표기하지만 고정 커밋 원파일은 ADM2 228개였다. 이름은 영문이고 시군구의 한글/상위 코드 증거가 부족하다. Matt Pocock research 스킬에 따라 독립 조사 문서를 docs/research-korea-boundaries.md에 작성했다. SGIS 공식 2025 경계·코드집 패키지를 다음 우선 후보로 두되 원본 ZIP·이용안내·같은 시점/위상 검증 전에는 앱에 번들하지 않는다. 이번에는 임의 지역명 분류 대신 원본 GPS 파서와 로컬 표시를 먼저 구현한다. 영상 GPS는 미추출 상태로 유지하고 위치를 외부로 보내지 않는다.
