@@ -1,6 +1,7 @@
 # 빌드 결과와 로컬 데이터는 원격 저장소에 포함하지 않습니다.
 bin/
 obj/
+__pycache__/
 dist/
 .vs/
 .cache/
