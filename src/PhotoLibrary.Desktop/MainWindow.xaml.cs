@@ -38,9 +38,10 @@ public partial class MainWindow : Window
     internal Task QueryTask => _queryTask;
     private Task _queryTask = Task.CompletedTask;
 
-    public MainWindow(string database)
+    public MainWindow(string database, bool onlineMaps = false)
     {
         InitializeComponent();
+        MapPanel.Configure(onlineMaps);
         _database = Path.GetFullPath(database);
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _timer.Tick += async (_, _) => { if (_queryTask.IsCompleted) await RefreshRowsAsync(); };
@@ -224,6 +225,7 @@ public partial class MainWindow : Window
     private async Task ShowPreviewAsync(PhotoItem? item)
     {
         var version = ++_previewVersion;
+        MapPanel.SetPhoto(item?.Record);
         VideoPanel.Reset();
         VideoPanel.Visibility = Visibility.Collapsed;
         Viewer.Visibility = Visibility.Visible;
@@ -324,6 +326,6 @@ public partial class MainWindow : Window
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         if (_scan is not null) { e.Cancel = true; _closeAfterScan = true; _scan.Cancel(); Status.Text = "저장된 항목을 보존하고 종료하는 중…"; }
-        else { _closed = true; _previewVersion++; _timer.Stop(); VideoPanel.Dispose(); }
+        else { _closed = true; _previewVersion++; _timer.Stop(); MapPanel.Dispose(); VideoPanel.Dispose(); }
     }
 }

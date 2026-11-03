@@ -1,5 +1,11 @@
 # 결정 기록
 
+## 상단 오른쪽 지도 착수
+
+구현과 검증을 마쳤다. Release 빌드 0경고/0오류, `--map-test test-artifacts/map-ui-final` exit 0이다. 합성 GPS 핀·확대·선택 해제·영상/오류/측지기준·늦은 응답·캐시/304/no-store·잘못된 응답·원본 해시를 검사했다. `--map-live-test test-artifacts/map-live-01`은 사용자 좌표 없이 공개 기본 화면을 표시했고 실제 지도 캡처와 상단 배치를 확인했다. `--smoke-test test-artifacts/map-regression-ui`, `--slideshow-test test-artifacts/map-regression-slideshow`, Index `--self-test test-artifacts/map-regression-catalog`, `--iphone-test test-artifacts/map-regression-iphone test-artifacts/iphone-media-final`도 exit 0이었다. 마지막 드래그 상태 초기화 변경 후 빌드와 합성 지도 검사를 다시 통과했다. 아이폰 검사에는 기존 D3D11 할당/converter/thumbnail 경고가 남으며 GPU/HDR 해결로 간주하지 않는다. 실제 마우스·DPI·장시간 확인은 남겼고 docs/map.md에 사용법과 개인정보/캐시 한계를 기록했다.
+
+사용자가 지정한 빨간 박스에 실제 선택 사진 지도를 구현한다. WebView2 도입 대신 기본 WPF 이미지/Canvas와 HttpClient를 사용해 추가 브라우저 런타임 설치를 피한다. OSM 공식 정책을 확인했고 현재 뷰포트만 요청하며 앱 식별·출처·HTTP 캐시/조건부 검증을 적용한다. 사진 선택 시 타일 영역이 제공자에 드러날 수 있음을 UI에 알리고 온라인 토글을 제공한다. 합성 검사는 외부 요청 없이 가짜 HTTP와 별도 시험 캐시를 사용하고 실제 확인은 공개 기본 지도 한 화면만 요청한다. 사용자 스크린샷의 실제 GPS는 외부 시험에 사용하지 않는다. 측지기준 누락은 참고 위치 경고, 명시적 비-WGS84는 미확정으로 표시하며 행정구역 분류 완료로 간주하지 않는다.
+
 ## 사진 전체 화면·슬라이드쇼 착수
 
 사용자가 지도 전체 화면이 아니라 사진 전체 화면과 자동 전환/간격 설정으로 요청을 정정했다. 이번에는 지도 UI를 바꾸지 않는다. 기본 5초/1~300초, 마지막 사진에서 정지, 다시 재생하면 처음부터, 사진은 화면 맞춤(미리보기 긴 변 2400px 제한 유지)으로 구현한다. 모달 전체 화면에서 DB/폴더/기간을 고정하고 별도 창에서 조회하므로 원래 선택과 확대 상태는 유지한다. 간격은 실행 중 원래 창에도 돌아오지만 앱 재시작 후 기본값으로 시작한다. 수집 중에는 실행을 막아 내부 DB 갱신과 OFFSET 탐색 충돌을 피한다. 별도 앱/코덱/프레임워크를 추가하지 않는다.
