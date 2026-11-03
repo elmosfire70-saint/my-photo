@@ -164,9 +164,63 @@ internal static class UiSmokeTest
         await window.BackupDatabaseAsync(backup);
         Check(window.Status.Text.StartsWith("DB 백업 실패") && window.ChooseDatabase.IsEnabled
             && backupHash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(backup))), "UI backup failure preserves file and restores controls");
+        await CheckDailyBackupAsync(window, output);
         Check(hashes.All(pair => pair.Value.SequenceEqual(SHA256.HashData(File.ReadAllBytes(pair.Key)))), "all synthetic originals unchanged");
         File.WriteAllText(Path.Combine(output, "result.txt"), "PASS: WPF smoke test, 205 synthetic inputs; originals unchanged.");
         Console.WriteLine("PASS: WPF smoke test completed");
+    }
+
+    private static async Task CheckDailyBackupAsync(MainWindow window, string output)
+    {
+        var database = Path.Combine(output, "catalog.sqlite");
+        var settings = Path.Combine(output, "isolated-settings.json");
+        var daily = new DailyBackup(settings);
+        var day = new DateOnly(2024, 2, 29);
+        Check(daily.Run(database, day).Contains("꺼짐") && !File.Exists(settings), "unconfigured daily backup writes nothing");
+        var folder = Path.Combine(output, "daily-backups"); Directory.CreateDirectory(folder);
+        daily.SetFolder(folder);
+        daily = new DailyBackup(settings);
+        Check(daily.Folder() == folder, "daily folder survives settings reload");
+        daily.Run(database, day);
+        var first = Directory.GetFiles(folder).Single();
+        var hash = SHA256.HashData(File.ReadAllBytes(first));
+        daily.Run(database, day);
+        Check(Directory.GetFiles(folder).Length == 1 && hash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(first))), "same day backup verified without replacement");
+        daily.Run(database, day.AddDays(1));
+        var otherDatabase = Path.Combine(output, "other-catalog.sqlite"); Catalog.Backup(database, otherDatabase);
+        daily.Run(otherDatabase, day);
+        Check(Directory.GetFiles(folder).Length == 3, "next day and different databases have separate snapshots");
+        File.WriteAllText(first, "corrupt test backup");
+        try { daily.Run(database, day); throw new Exception("corrupt daily backup accepted"); }
+        catch (Microsoft.Data.Sqlite.SqliteException) { Check(File.ReadAllText(first) == "corrupt test backup", "corrupt existing backup rejected without overwrite"); }
+        daily.SetFolder(null);
+        Check(new DailyBackup(settings).Folder() is null && Directory.GetFiles(folder).Length == 3, "disable persists without deleting backups");
+        File.WriteAllText(settings, "{");
+        try { daily.Folder(); throw new Exception("invalid settings accepted"); }
+        catch (System.Text.Json.JsonException) { Check(File.ReadAllText(settings) == "{", "invalid settings not silently overwritten"); }
+        var uiFolder = Path.Combine(output, "ui-daily"); Directory.CreateDirectory(uiFolder);
+        var task = window.SetDailyFolderAsync(uiFolder);
+        if (!task.IsCompleted)
+        {
+            window.Close();
+            Check(window.IsVisible && !window.DailyFolder.IsEnabled, "close waits for daily backup");
+        }
+        await task;
+        Check(window.DailyStatus.Text.StartsWith("자동 백업 검증 완료") && Directory.GetFiles(uiFolder).Length == 1,
+            "folder selection creates verified daily snapshot");
+        Directory.Move(uiFolder, uiFolder + "-offline");
+        var tomorrow = DateOnly.FromDateTime(DateTime.Now).AddDays(1);
+        await window.RunDailyBackupAsync(tomorrow);
+        Check(window.DailyStatus.Text.StartsWith("자동 백업 실패") && window.ChooseFolder.IsEnabled, "disconnected backup folder fails visibly and restores controls");
+        Directory.Move(uiFolder + "-offline", uiFolder);
+        await window.RunDailyBackupAsync(tomorrow);
+        Check(window.DailyStatus.Text.StartsWith("자동 백업 실패") && Directory.GetFiles(uiFolder).Length == 1, "failed day does not retry every timer tick");
+        await window.SetDailyFolderAsync(uiFolder);
+        Check(window.DailyStatus.Text.StartsWith("오늘 자동 백업 확인 완료"), "resetting folder retries safely");
+        await window.SetDailyFolderAsync(null);
+        Check(window.DailyStatus.Text.Contains("꺼짐") && Directory.GetFiles(uiFolder).Length == 1, "UI disable keeps existing daily backup");
+        await IdleAsync(window);
+        Capture(window, Path.Combine(output, "daily-backup.png"));
     }
 
     private static async Task Select2020Async(MainWindow window)

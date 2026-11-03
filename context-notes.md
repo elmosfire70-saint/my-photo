@@ -1,5 +1,13 @@
 # 결정 기록
 
+## 일일 DB 백업 착수
+
+Release 빌드 0경고/0오류, Index `--self-test test-artifacts/daily-backup-catalog-final`, Desktop `--smoke-test test-artifacts/daily-backup-ui-verified`, `--map-test test-artifacts/daily-backup-map-final`, `--slideshow-test test-artifacts/daily-backup-slideshow-final`은 exit 0이었다. 설정 미지정 무쓰기·재읽기·해제·윤일 다음 날·DB 분리·기존 해시 보존·손상/연결 해제·반복 재시도 방지·재설정·닫기 대기를 확인했고 마지막 화면을 시각 검사했다. 실제 사용자 설정은 변경하지 않았다.
+
+최초 카탈로그 회귀에서 CHECK 위반 시험이 실패했다. 진단 스킬로 동일 파일을 Python SQLite 3.53.1의 RO와 RW/query_only 연결로 비교해 RO에서만 integrity_check가 ok를 반환함을 재현했다. 검증 대상 백업에 RW 핸들+query_only=ON을 사용해 기존 CHECK 위반/임시 정리 시험을 다시 통과했다. 원본 DB 조회는 계속 RO이고 원본 사진을 쓰지 않는다. 전원 차단·24시간 실제 경과·동시 앱·실물 디스크 가득 참은 미검증이다.
+
+사용자 선택 폴더를 로컬 JSON에 원자적으로 저장한다. 기존 수동 백업/무결성 검증을 재사용하고 정규화 DB 경로 해시와 로컬 날짜로 일일 파일을 구분한다. 같은 날 백업은 재검증 후 유지하며 손상이면 실패로 알린다. 앱 실행 중 1분 확인은 하되 같은 DB/날짜 실패를 반복하지 않고 재시작/재설정 시 재시도한다. 폴더 미지정은 아무 파일도 만들지 않는다. 사용자 설정/사진 대신 격리된 합성 검사를 사용한다.
+
 ## 수동 DB 백업 착수
 
 Release 빌드 0경고/0오류, Index `--self-test test-artifacts/backup-catalog-final`과 Desktop `--smoke-test test-artifacts/backup-ui-final` exit 0이다. 백업 재열기/행 동일성·원본 DB 해시·WAL 커밋·기존 대상 보존·손상/무결성 실패 시 미공개 및 임시 정리를 확인했다. UI 비동기 실행·충돌 버튼 비활성화·실패 후 복귀·합성 원본 불변을 검사하고 캡처에서 새 버튼 배치를 확인했다. 지도 합성 회귀 `--map-test test-artifacts/backup-map-regression`도 exit 0이었다. Microsoft 공식 BackupDatabase 문서의 쓰기 연결 차단/단계별 취소 미지원 한계를 docs/database-backup.md에 기록했다. 일일 자동 백업과 활성 DB 복원은 아직 구현하지 않았다.

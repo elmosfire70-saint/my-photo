@@ -41,6 +41,11 @@
         <Button x:Name="ApplyFilter" Content="기간 적용" Click="Apply_Click"/>
         <Button x:Name="ClearFilter" Content="전체 날짜" Click="Clear_Click"/>
       </StackPanel>
+      <StackPanel Orientation="Horizontal" Margin="0,6,0,0" MaxWidth="620" HorizontalAlignment="Left">
+        <Button x:Name="DailyFolder" Content="자동 백업 폴더…" Padding="8,4" Click="DailyFolder_Click"/>
+        <Button x:Name="DisableDaily" Content="자동 백업 끄기" Padding="8,4" Click="DisableDaily_Click"/>
+        <TextBlock x:Name="DailyStatus" Text="자동 백업 꺼짐" Width="330" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="11"/>
+      </StackPanel>
     </StackPanel>
     <TextBlock x:Name="FolderLabel" Grid.Row="2" Text="사진 폴더를 선택하세요. 자동 검색하거나 원본을 수정하지 않습니다."
                TextTrimming="CharacterEllipsis" MaxWidth="620" HorizontalAlignment="Left" Margin="0,0,0,12" Foreground="#50627A"/>

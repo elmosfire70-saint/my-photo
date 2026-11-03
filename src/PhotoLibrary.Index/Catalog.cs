@@ -204,11 +204,8 @@ public static class Catalog
                 target.Open();
                 target.CreateCollation("WINPATH", (left, right) => StringComparer.OrdinalIgnoreCase.Compare(left, right));
                 source.BackupDatabase(target);
-                using var check = Command(target, "PRAGMA integrity_check");
-                if (!string.Equals(check.ExecuteScalar() as string, "ok", StringComparison.Ordinal))
-                    throw new IOException("DB 무결성 검사에 실패했습니다. 백업을 완료하지 않았습니다.");
             }
-            using (Open(temporary, create: false)) { }
+            Verify(temporary);
             File.Move(temporary, destination, overwrite: false);
         }
         finally
@@ -218,14 +215,23 @@ public static class Catalog
         }
     }
 
-    private static SqliteConnection Open(string path, bool create)
+    public static void Verify(string database)
+    {
+        // 읽기 전용 핸들은 CHECK 위반을 놓칠 수 있어 RW 핸들에 query_only를 적용합니다.
+        using var connection = Open(Path.GetFullPath(database), create: false, verify: true);
+        using var check = Command(connection, "PRAGMA query_only=ON; PRAGMA integrity_check");
+        if (!string.Equals(check.ExecuteScalar() as string, "ok", StringComparison.Ordinal))
+            throw new IOException("DB 무결성 검사에 실패했습니다. 백업을 완료하지 않았습니다.");
+    }
+
+    private static SqliteConnection Open(string path, bool create, bool verify = false)
     {
         RejectLinks(path);
         var existed = File.Exists(path);
         if (create) Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
-            DataSource = path, Mode = create ? SqliteOpenMode.ReadWriteCreate : SqliteOpenMode.ReadOnly,
+            DataSource = path, Mode = create ? SqliteOpenMode.ReadWriteCreate : verify ? SqliteOpenMode.ReadWrite : SqliteOpenMode.ReadOnly,
             Pooling = false
         }.ToString());
         try

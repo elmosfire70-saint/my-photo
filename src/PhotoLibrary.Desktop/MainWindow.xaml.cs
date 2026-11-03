@@ -30,6 +30,9 @@ public partial class MainWindow : Window
     private readonly SemaphoreSlim _previewGate = new(1);
     private bool _closed, _closeAfterScan;
     private bool _backingUp;
+    private readonly DailyBackup _daily;
+    private readonly DispatcherTimer _dailyTimer = new() { Interval = TimeSpan.FromMinutes(1) };
+    private (string Database, DateOnly Day)? _dailyAttempt;
     private bool _updatingTimeline;
     private string? _timelineKey = "all";
     private sealed record TimelineChoice(string Key, DateTime? From, DateTime? To);
@@ -39,11 +42,14 @@ public partial class MainWindow : Window
     internal Task QueryTask => _queryTask;
     private Task _queryTask = Task.CompletedTask;
 
-    public MainWindow(string database, bool onlineMaps = false)
+    public MainWindow(string database, bool onlineMaps = false, string? backupSettings = null)
     {
         InitializeComponent();
         MapPanel.Configure(onlineMaps);
         _database = Path.GetFullPath(database);
+        _daily = new DailyBackup(backupSettings ?? Path.Combine(Path.GetDirectoryName(_database)!, "backup-settings.json"));
+        Loaded += async (_, _) => { _dailyTimer.Start(); await RunDailyBackupAsync(); };
+        _dailyTimer.Tick += async (_, _) => await RunDailyBackupAsync();
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _timer.Tick += async (_, _) => { if (_queryTask.IsCompleted) await RefreshRowsAsync(); };
         Closing += OnClosing;
@@ -56,7 +62,7 @@ public partial class MainWindow : Window
         if (picker.ShowDialog(this) == true) await ScanFolderAsync(picker.FolderName);
     }
 
-    private void ChooseDatabase_Click(object sender, RoutedEventArgs e)
+    private async void ChooseDatabase_Click(object sender, RoutedEventArgs e)
     {
         var picker = new SaveFileDialog { Title = "사진함 DB 위치", FileName = "catalog.sqlite", Filter = "사진함 DB|*.sqlite", AddToRecent = false, OverwritePrompt = false };
         if (picker.ShowDialog(this) == true)
@@ -65,6 +71,48 @@ public partial class MainWindow : Window
             Status.Text = "DB 위치를 선택했습니다. 폴더를 선택하거나 다시 수집하세요.";
             PhotoList.ItemsSource = null;
             ResetTimeline();
+            await RunDailyBackupAsync();
+        }
+    }
+
+    private async void DailyFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new OpenFolderDialog { Title = "일일 DB 백업 폴더 · 사진 원본은 포함하지 않음", AddToRecent = false };
+        if (picker.ShowDialog(this) == true) await SetDailyFolderAsync(picker.FolderName);
+    }
+    private async void DisableDaily_Click(object sender, RoutedEventArgs e) => await SetDailyFolderAsync(null);
+
+    internal async Task SetDailyFolderAsync(string? folder)
+    {
+        if (_backingUp || _scan is not null) return;
+        try { _daily.SetFolder(folder); _dailyAttempt = null; await RunDailyBackupAsync(); }
+        catch (Exception exception) { DailyStatus.Text = "자동 백업 설정 실패 · " + exception.Message; }
+        DailyStatus.ToolTip = DailyStatus.Text;
+    }
+
+    internal async Task RunDailyBackupAsync(DateOnly? date = null)
+    {
+        if (_closed || _backingUp || _scan is not null) return;
+        try
+        {
+            if (_daily.Folder() is null) { DailyStatus.Text = "자동 백업 꺼짐 · 폴더를 지정하세요."; DailyStatus.ToolTip = DailyStatus.Text; return; }
+        }
+        catch (Exception exception) { DailyStatus.Text = "자동 백업 설정 실패 · " + exception.Message; DailyStatus.ToolTip = DailyStatus.Text; return; }
+        var database = _database;
+        var day = date ?? DateOnly.FromDateTime(DateTime.Now);
+        if (_dailyAttempt == (database, day)) return;
+        if (!File.Exists(database)) { DailyStatus.Text = "자동 백업 대기 · 수집한 DB가 없습니다."; return; }
+        _dailyAttempt = (database, day);
+        _backingUp = true;
+        ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = DailyFolder.IsEnabled = DisableDaily.IsEnabled = false;
+        DailyStatus.Text = "자동 백업 확인 중…";
+        try { DailyStatus.Text = await Task.Run(() => _daily.Run(database, day)); }
+        catch (Exception exception) { DailyStatus.Text = "자동 백업 실패 · " + exception.Message; }
+        finally
+        {
+            _backingUp = false;
+            ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = DailyFolder.IsEnabled = DisableDaily.IsEnabled = true;
+            DailyStatus.ToolTip = DailyStatus.Text;
         }
     }
 
@@ -81,7 +129,7 @@ public partial class MainWindow : Window
         { Status.Text = "수집을 마친 사진함 DB가 있어야 백업할 수 있습니다."; return; }
         var database = _database;
         _backingUp = true;
-        ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = false;
+        ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = DailyFolder.IsEnabled = DisableDaily.IsEnabled = false;
         Status.Text = "DB 백업과 무결성 검사 중 · 원본 사진은 변경하지 않습니다.";
         try
         {
@@ -92,7 +140,7 @@ public partial class MainWindow : Window
         finally
         {
             _backingUp = false;
-            ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = true;
+            ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = DailyFolder.IsEnabled = DisableDaily.IsEnabled = true;
         }
     }
 
@@ -105,7 +153,7 @@ public partial class MainWindow : Window
         ResetTimeline();
         FolderLabel.Text = _root;
         FromDate.SelectedDate = ToDate.SelectedDate = null;
-        ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = false;
+        ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = DailyFolder.IsEnabled = DisableDaily.IsEnabled = false;
         CancelScan.IsEnabled = true;
         _scan = new CancellationTokenSource();
         var cancellation = _scan.Token;
@@ -123,10 +171,11 @@ public partial class MainWindow : Window
             _timer.Stop();
             _scan.Dispose();
             _scan = null;
-            ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = true;
+            ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = DailyFolder.IsEnabled = DisableDaily.IsEnabled = true;
             CancelScan.IsEnabled = false;
             await RefreshRowsAsync(refreshTimeline: true);
             if (_closeAfterScan) Close();
+            else await RunDailyBackupAsync();
         }
     }
 
@@ -356,6 +405,6 @@ public partial class MainWindow : Window
     {
         if (_backingUp) { e.Cancel = true; Status.Text = "DB 백업이 끝난 뒤 종료하세요."; return; }
         if (_scan is not null) { e.Cancel = true; _closeAfterScan = true; _scan.Cancel(); Status.Text = "저장된 항목을 보존하고 종료하는 중…"; }
-        else { _closed = true; _previewVersion++; _timer.Stop(); MapPanel.Dispose(); VideoPanel.Dispose(); }
+        else { _closed = true; _previewVersion++; _timer.Stop(); _dailyTimer.Stop(); MapPanel.Dispose(); VideoPanel.Dispose(); }
     }
 }
