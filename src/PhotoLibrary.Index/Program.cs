@@ -8,6 +8,7 @@ Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
 try
 {
     if (args is ["--self-test", var output]) SelfTest.Run(output);
+    else if (args is ["backup", var sourceDatabase, var destination]) Catalog.Backup(sourceDatabase, destination);
     else if (args is ["scan", var root, var database])
         Console.WriteLine(JsonSerializer.Serialize(Catalog.Scan(root, database, cancellation.Token)));
     else if (args is ["list", var path])
@@ -16,7 +17,7 @@ try
         Console.WriteLine(JsonSerializer.Serialize(Catalog.List(dateDatabase,
             DateOnly.ParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture),
             DateOnly.ParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture))));
-    else throw new ArgumentException("Usage: scan SOURCE DATABASE | list DATABASE [FROM_DATE TO_DATE] | --self-test NEW_TEST_OUTPUT");
+    else throw new ArgumentException("Usage: scan SOURCE DATABASE | list DATABASE [FROM_DATE TO_DATE] | backup DATABASE NEW_FILE | --self-test NEW_TEST_OUTPUT");
     return 0;
 }
 catch (OperationCanceledException)

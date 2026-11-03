@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _timer;
     private readonly SemaphoreSlim _previewGate = new(1);
     private bool _closed, _closeAfterScan;
+    private bool _backingUp;
     private bool _updatingTimeline;
     private string? _timelineKey = "all";
     private sealed record TimelineChoice(string Key, DateTime? From, DateTime? To);
@@ -67,16 +68,44 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void BackupDatabase_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new SaveFileDialog { Title = "사진함 DB 백업 · 새 파일만 가능", FileName = $"photo-backup-{DateTime.Now:yyyyMMdd-HHmmss}.sqlite",
+            Filter = "사진함 DB|*.sqlite", AddToRecent = false, OverwritePrompt = true };
+        if (picker.ShowDialog(this) == true) await BackupDatabaseAsync(picker.FileName);
+    }
+
+    internal async Task BackupDatabaseAsync(string destination)
+    {
+        if (_backingUp || _scan is not null || !File.Exists(_database))
+        { Status.Text = "수집을 마친 사진함 DB가 있어야 백업할 수 있습니다."; return; }
+        var database = _database;
+        _backingUp = true;
+        ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = false;
+        Status.Text = "DB 백업과 무결성 검사 중 · 원본 사진은 변경하지 않습니다.";
+        try
+        {
+            await Task.Run(() => Catalog.Backup(database, destination));
+            Status.Text = "DB 백업 검증 완료 · " + destination;
+        }
+        catch (Exception exception) { Status.Text = "DB 백업 실패 · " + exception.Message; }
+        finally
+        {
+            _backingUp = false;
+            ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = true;
+        }
+    }
+
     internal async Task ScanFolderAsync(string root)
     {
-        if (_scan is not null) return;
+        if (_scan is not null || _backingUp) return;
         _root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
         _offset = 0;
         PhotoList.ItemsSource = null;
         ResetTimeline();
         FolderLabel.Text = _root;
         FromDate.SelectedDate = ToDate.SelectedDate = null;
-        ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = false;
+        ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = false;
         CancelScan.IsEnabled = true;
         _scan = new CancellationTokenSource();
         var cancellation = _scan.Token;
@@ -94,7 +123,7 @@ public partial class MainWindow : Window
             _timer.Stop();
             _scan.Dispose();
             _scan = null;
-            ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = true;
+            ChooseFolder.IsEnabled = ChooseDatabase.IsEnabled = Rescan.IsEnabled = BackupDatabase.IsEnabled = true;
             CancelScan.IsEnabled = false;
             await RefreshRowsAsync(refreshTimeline: true);
             if (_closeAfterScan) Close();
@@ -325,6 +354,7 @@ public partial class MainWindow : Window
     }
     private void OnClosing(object? sender, CancelEventArgs e)
     {
+        if (_backingUp) { e.Cancel = true; Status.Text = "DB 백업이 끝난 뒤 종료하세요."; return; }
         if (_scan is not null) { e.Cancel = true; _closeAfterScan = true; _scan.Cancel(); Status.Text = "저장된 항목을 보존하고 종료하는 중…"; }
         else { _closed = true; _previewVersion++; _timer.Stop(); MapPanel.Dispose(); VideoPanel.Dispose(); }
     }

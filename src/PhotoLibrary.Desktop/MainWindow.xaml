@@ -30,7 +30,8 @@
         <Button x:Name="ChooseDatabase" Content="DB 위치…" Click="ChooseDatabase_Click"/>
         <Button x:Name="Rescan" Content="다시 수집" Click="Rescan_Click" IsEnabled="False"/>
         <Button x:Name="CancelScan" Content="수집 취소" Click="CancelScan_Click" IsEnabled="False"/>
-        <TextBlock Text="등록은 원본 복사·이동이 아닙니다." VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#50627A"/>
+        <Button x:Name="BackupDatabase" Content="DB 백업…" Click="BackupDatabase_Click" ToolTip="사진 원본이 아닌 사진함 DB를 새 파일에 백업합니다."/>
+        <TextBlock Text="원본 유지" VerticalAlignment="Center" Foreground="#50627A"/>
       </StackPanel>
       <StackPanel x:Name="Filters" Orientation="Horizontal">
         <Label Content="시작일" Target="{Binding ElementName=FromDate}"/>

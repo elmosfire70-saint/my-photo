@@ -182,6 +182,42 @@ public static class Catalog
         return months;
     }
 
+    public static void Backup(string database, string destination)
+    {
+        database = Path.GetFullPath(database);
+        destination = Path.GetFullPath(destination);
+        RejectLinks(destination);
+        if (string.Equals(database, destination, StringComparison.OrdinalIgnoreCase)
+            || File.Exists(destination) || Directory.Exists(destination))
+            throw new IOException("기존 파일에는 백업할 수 없습니다. 새 파일 이름을 선택하세요.");
+        var directory = Path.GetDirectoryName(destination)!;
+        if (!Directory.Exists(directory)) throw new DirectoryNotFoundException("백업 폴더가 없습니다.");
+        using var source = Open(database, create: false);
+        var temporary = Path.Combine(directory, ".photo-backup-" + Guid.NewGuid().ToString("N") + ".sqlite");
+        // CreateNew로 이번 작업 소유의 임시 파일만 확보하며 기존 파일은 덮지 않습니다.
+        using (new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
+        try
+        {
+            using (var target = new SqliteConnection(new SqliteConnectionStringBuilder
+            { DataSource = temporary, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString()))
+            {
+                target.Open();
+                target.CreateCollation("WINPATH", (left, right) => StringComparer.OrdinalIgnoreCase.Compare(left, right));
+                source.BackupDatabase(target);
+                using var check = Command(target, "PRAGMA integrity_check");
+                if (!string.Equals(check.ExecuteScalar() as string, "ok", StringComparison.Ordinal))
+                    throw new IOException("DB 무결성 검사에 실패했습니다. 백업을 완료하지 않았습니다.");
+            }
+            using (Open(temporary, create: false)) { }
+            File.Move(temporary, destination, overwrite: false);
+        }
+        finally
+        {
+            foreach (var suffix in new[] { "", "-journal", "-wal", "-shm" })
+                if (File.Exists(temporary + suffix)) File.Delete(temporary + suffix);
+        }
+    }
+
     private static SqliteConnection Open(string path, bool create)
     {
         RejectLinks(path);

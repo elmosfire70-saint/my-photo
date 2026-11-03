@@ -1,5 +1,11 @@
 # 결정 기록
 
+## 수동 DB 백업 착수
+
+Release 빌드 0경고/0오류, Index `--self-test test-artifacts/backup-catalog-final`과 Desktop `--smoke-test test-artifacts/backup-ui-final` exit 0이다. 백업 재열기/행 동일성·원본 DB 해시·WAL 커밋·기존 대상 보존·손상/무결성 실패 시 미공개 및 임시 정리를 확인했다. UI 비동기 실행·충돌 버튼 비활성화·실패 후 복귀·합성 원본 불변을 검사하고 캡처에서 새 버튼 배치를 확인했다. 지도 합성 회귀 `--map-test test-artifacts/backup-map-regression`도 exit 0이었다. Microsoft 공식 BackupDatabase 문서의 쓰기 연결 차단/단계별 취소 미지원 한계를 docs/database-backup.md에 기록했다. 일일 자동 백업과 활성 DB 복원은 아직 구현하지 않았다.
+
+행정구역 분류는 미해결 검증 조건을 유지한다. 독립적으로 진행할 안전 기능으로 수동 DB 백업을 선택했다. 원본 DB 파일 복사 대신 기존 Microsoft.Data.Sqlite의 BackupDatabase를 사용하고 임시 백업의 integrity_check 후 새 대상 파일로 이동한다. 기존 대상은 덮지 않는다. 일일 자동 백업과 활성 DB 복원은 별도 단계다. 실제 사용자 DB 대신 합성 자료만 검증한다. `--slideshow-test test-artifacts/backup-slideshow-regression`도 exit 0으로 기존 전체 화면·시간 전환·종료·원본 불변 검사를 통과했다.
+
 ## 상단 오른쪽 지도 착수
 
 구현과 검증을 마쳤다. Release 빌드 0경고/0오류, `--map-test test-artifacts/map-ui-final` exit 0이다. 합성 GPS 핀·확대·선택 해제·영상/오류/측지기준·늦은 응답·캐시/304/no-store·잘못된 응답·원본 해시를 검사했다. `--map-live-test test-artifacts/map-live-01`은 사용자 좌표 없이 공개 기본 화면을 표시했고 실제 지도 캡처와 상단 배치를 확인했다. `--smoke-test test-artifacts/map-regression-ui`, `--slideshow-test test-artifacts/map-regression-slideshow`, Index `--self-test test-artifacts/map-regression-catalog`, `--iphone-test test-artifacts/map-regression-iphone test-artifacts/iphone-media-final`도 exit 0이었다. 마지막 드래그 상태 초기화 변경 후 빌드와 합성 지도 검사를 다시 통과했다. 아이폰 검사에는 기존 D3D11 할당/converter/thumbnail 경고가 남으며 GPU/HDR 해결로 간주하지 않는다. 실제 마우스·DPI·장시간 확인은 남겼고 docs/map.md에 사용법과 개인정보/캐시 한계를 기록했다.

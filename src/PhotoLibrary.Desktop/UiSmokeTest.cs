@@ -153,6 +153,17 @@ internal static class UiSmokeTest
         window.FitPreview();
         await IdleAsync(window);
         Capture(window, Path.Combine(output, "window.png"));
+        var backup = Path.Combine(output, "ui-backup.sqlite");
+        var backingUp = window.BackupDatabaseAsync(backup);
+        Check(!window.BackupDatabase.IsEnabled && !window.ChooseDatabase.IsEnabled && !window.ChooseFolder.IsEnabled,
+            "backup disables conflicting commands");
+        await backingUp;
+        Check(window.Status.Text.StartsWith("DB 백업 검증 완료") && window.BackupDatabase.IsEnabled
+            && Catalog.List(backup, root: root, limit: 1000).Count == 205, "UI backup completes with readable catalog");
+        var backupHash = SHA256.HashData(File.ReadAllBytes(backup));
+        await window.BackupDatabaseAsync(backup);
+        Check(window.Status.Text.StartsWith("DB 백업 실패") && window.ChooseDatabase.IsEnabled
+            && backupHash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(backup))), "UI backup failure preserves file and restores controls");
         Check(hashes.All(pair => pair.Value.SequenceEqual(SHA256.HashData(File.ReadAllBytes(pair.Key)))), "all synthetic originals unchanged");
         File.WriteAllText(Path.Combine(output, "result.txt"), "PASS: WPF smoke test, 205 synthetic inputs; originals unchanged.");
         Console.WriteLine("PASS: WPF smoke test completed");

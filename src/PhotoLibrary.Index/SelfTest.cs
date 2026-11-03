@@ -143,7 +143,49 @@ internal static class SelfTest
         Check(databaseHash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(database))), "timeline queries do not mutate database");
         Check(timelineHashes.All(pair => pair.Value.SequenceEqual(SHA256.HashData(File.ReadAllBytes(pair.Key)))), "timeline sources unchanged");
         CheckGps();
+        CheckBackup(database, output);
         Console.WriteLine("PASS: catalog self-test completed");
+    }
+
+    private static void CheckBackup(string database, string output)
+    {
+        var sourceHash = SHA256.HashData(File.ReadAllBytes(database));
+        var backup = Path.Combine(output, "backup.sqlite");
+        Catalog.Backup(database, backup);
+        Check(Catalog.List(database).SequenceEqual(Catalog.List(backup)), "backup reopens with identical catalog rows");
+        Check(sourceHash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(database))), "backup does not modify source database");
+        var backupHash = SHA256.HashData(File.ReadAllBytes(backup));
+        Expect<IOException>(() => Catalog.Backup(database, backup), "existing backup refused");
+        Expect<IOException>(() => Catalog.Backup(database, database), "source overwrite refused");
+        Check(backupHash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(backup))), "existing backup preserved");
+        Expect<DirectoryNotFoundException>(() => Catalog.Backup(database, Path.Combine(output, "missing", "backup.sqlite")), "missing backup directory rejected");
+        var invalid = Path.Combine(output, "corrupt.sqlite"); File.WriteAllText(invalid, "not a database");
+        var failed = Path.Combine(output, "failed-backup.sqlite");
+        Expect<SqliteException>(() => Catalog.Backup(invalid, failed), "corrupt source rejected");
+        Check(!File.Exists(failed) && !Directory.GetFiles(output, ".photo-backup-*").Any(), "failure leaves no published or temporary backup");
+        var inconsistent = Path.Combine(output, "inconsistent.sqlite");
+        Catalog.Backup(database, inconsistent);
+        using (var broken = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = inconsistent, Pooling = false }.ToString()))
+        {
+            broken.Open();
+            using var command = broken.CreateCommand();
+            command.CommandText = "CREATE TABLE invalid_fixture(value INTEGER CHECK(value>0)); PRAGMA ignore_check_constraints=ON; INSERT INTO invalid_fixture VALUES(-1);";
+            command.ExecuteNonQuery();
+        }
+        Expect<IOException>(() => Catalog.Backup(inconsistent, failed), "integrity failure prevents publication");
+        Check(!File.Exists(failed) && !Directory.GetFiles(output, ".photo-backup-*").Any(), "integrity failure cleans owned temporary files");
+        using (var writer = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = database, Pooling = false }.ToString()))
+        {
+            writer.Open();
+            writer.CreateCollation("WINPATH", (left, right) => StringComparer.OrdinalIgnoreCase.Compare(left, right));
+            using var command = writer.CreateCommand();
+            command.CommandText = "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; UPDATE media SET offset_text='+01:23';";
+            command.ExecuteNonQuery();
+            Check(new FileInfo(database + "-wal").Length > 0, "committed changes remain in WAL during backup");
+            var walBackup = Path.Combine(output, "wal-backup.sqlite");
+            Catalog.Backup(database, walBackup);
+            Check(Catalog.List(walBackup).All(row => row.Offset == "+01:23"), "backup includes committed WAL changes");
+        }
     }
 
     private static void CheckGps()
